@@ -1,0 +1,158 @@
+---
+# tasks file for batandwa.ansible-erpnext
+
+# - name: Install ERPNext
+#   command: "" chdir=~
+#   register: erpnext_exists
+#   ignore_errors: yes
+
+- name: Check if Frappe framework is cloned
+  stat: path="{{ erpnext_root_path }}"
+  # command: stat {{ erpnext_root_path }}
+  register: erpnext_path_stat_result
+  # ignore_errors: yes
+  # sudo: yes
+  # sudo_user: "{{ erpnext_runner }}"
+
+# - name: Check for an ERPNext installation
+#   command: stat {{ erpnext_root_path }}/sites/{{ erpnext_domain }}
+#   register: erpnext_installed
+#   ignore_errors: yes
+
+- name: Get Frappe framework
+  # git: repo=https://github.com/frappe/frappe-bench dest={{ erpnext_root_path }} version=72f819119b402c8acb7fae59f450dbb6ae62a518
+  git: repo=https://github.com/frappe/bench dest={{ erpnext_root_path }} version={{ erpnext_git_commit }}
+  when: not erpnext_path_stat_result.stat.exists
+  # sudo: yes
+  # sudo_user: "{{ erpnext_runner }}"
+
+# - name: Install bench
+#   pip: chdir="{{ erpnext_root_path }}" name="bench"
+#   sudo: yes
+#   sudo_user: root
+
+# sudo pip install -e frappy
+# bench init frappy_install
+# cd frappy_install
+
+- name: Create site directory
+  file: 
+    state: directory  
+    path: "{{ erpnext_root_path }}/sites/{{ erpnext_instance_name }}"
+
+- name: Create empty settings file
+  file: 
+    state: touch  
+    path: "{{ erpnext_root_path }}/sites/{{ erpnext_instance_name }}/site_config.json"
+
+- name: Populate settings file
+  template: 
+    src: site_config.json
+    dest: "{{ erpnext_root_path }}/sites/{{ erpnext_instance_name }}/site_config.json"
+
+
+# bench get-app erpnext https://github.com/frappe/erpnext
+# bench get-app shopping_cart https://github.com/frappe/shopping-cart
+# bench new-site erpsys
+# bench frappe --install_app erpnext erpsys
+#### bench frappe --install_app shopping_cart erpsys
+# bench start
+
+
+
+
+
+
+
+
+
+
+# - name: Remove root password
+#   mysql_user: login_user=root login_password="{{ mariadb_root_mysql_password }}" name=root password=""
+
+# - name: Restore root password
+#   mysql_user: login_user=root login_password="" name=root user=root password="{{ mariadb_root_mysql_password }}"
+
+# - name: Install ERPNext site on Frappe
+#   command: "./scripts/install.sh single {{ erpnext_domain }}"
+#   args:
+#     chdir: "{{ erpnext_root_path }}"
+#   when: new_instance and erpnext_installed|failed
+#   sudo: yes
+#   sudo_user: {{ erpnext_user }}
+
+# apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db
+# add-apt-repository 'deb http://ftp.wa.co.za/pub/mariadb/repo/10.0/ubuntu precise main'
+
+
+
+# Re: [ansible-project] Re: How to use the JSON part of an HTTP response in the subsequent tasks?
+# Here's a bit late update on how I managed to resolve the issues with the `uri` module, hopefully that would be useful to someone else:
+
+# First of all, I was wrong about the custom headers supplied in the `uri` module - they do work, as I was able to confirm it both from debugging and looking at the Python code.
+# What does not work though is using a JSON structure in its entirety when trying to supply it as part of a custom header to `uri`. The problem is, as I had assumed before and was able to confirm by going into a deep-debugging mode of the `uri` module (I had to modify the sources of the `httplib2` to write out headers of all requests to a file) is the fact that the JSON structure in the response from `uri` is in the form of the unicode string and in case it is used in the header of a subsequent request to a `uri` module, it is passed in the unicode form and triggers the 400 errors.
+
+# So taking slightly modified above examples, this will not work (400 error in the "Archive ... " task):
+
+#  - name: Login to account as the specified user and obtain its id
+#     local_action: >
+#       uri url='http://{{ account_app }}.{{ target_domain}}/auth/user'
+#       body='{ "email": "{{ userId }}", "password": "{{ sa_password }}" }'
+#       method=POST
+#       return_content=yes status_code=200
+#       HEADER_Content-Type="application/json"
+#     register: usp_user
+ 
+# - name: Archive previous top-level settings config
+#     local_action: >
+#        command
+#        uri url='http://{{ config_manager }}.{{ target_domain }}/archive/settings'
+#        method=PUT
+#        return_content=yes status_code=200
+#        HEADER_Content-Type="application/json"
+#        HEADER_user="{{ usp_user.json }}"
+
+# But this one will:
+
+#   - name: Archive previous top-level settings config
+#     local_action: >
+#       uri url='http://{{ config_manager }}.{{ target_domain }}/archive/settings'
+#       method=PUT
+#       return_content=yes status_code=200
+#       HEADER_Content-Type="application/json"
+#       HEADER_user='{{ usp_user.content | replace("\n", "") }}'
+
+# `usp_user.content` contains the same JSON structure as `usp_user.json`, only it has got the newlines that I need to remove using the `replace` Jinja2 filter.
+
+
+
+# - name: MySQL setup
+#   hosts: dbservers
+#   gather_facts: true
+#   tasks:
+#     - name: ensure mysql is running and starts on boot
+#       service: name=mysql state=started enabled=true
+
+#     # Need to do this for idempotency, see
+#     # http://ansible.cc/docs/modules.html#mysql-user
+#     - name: update mysql root password for all root accounts
+#       mysql_user: name=root host=localhost password={{ root_db_password }}
+
+#     - name: copy .my.cnf file with root password credentials
+#       template: src=templates/root/.my.cnf dest=/root/.my.cnf owner=root mode=0600
+
+#     - name: update mysql root password for all root accounts
+#       mysql_user: name=root host={{ item }} password={{ root_db_password }}
+#       with_items:
+#         - {{ ansible_hostname }}
+#         - 127.0.0.1
+#         - ::1
+
+#     - name: ensure anonymous users are not in the database
+#       mysql_user: name='' host={{ item }} state=absent
+#       with_items:
+#         - localhost
+#         - {{ inventory_hostname }}
+
+#     - name: remove the test database
+#       mysql_db: name=test state=absent

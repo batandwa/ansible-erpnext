@@ -1,0 +1,10 @@
+---
+# vars file for batandwa.ansible-erpnext
+
+new_instance: yes
+erp_root: ~/frappy
+domain: erp.do.batandwa.me
+mysql_pass: netetypubleyonflochegangymentiv
+mariadb_run_dir: "{{ lookup('env', 'PWD') }}"
+mariadb_root_mysql_password: "{{ lookup('password', mariadb_run_dir + '/private/credentials/root-mysql-password') }}"
+erpnext_git_commit: b6b8d066bcd2d97067ac4aebb34d5d1e85121b1e
